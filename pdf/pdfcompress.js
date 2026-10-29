@@ -1,4 +1,3 @@
-
 #!/usr/bin/env node
 'use strict';
 
@@ -22,7 +21,6 @@ const path = require('path');
 const os = require('os');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
-const crypto = require('crypto');
 
 const execFileAsync = promisify(execFile);
 
@@ -59,6 +57,25 @@ function formatBytes(bytes) {
   }
 
   return `${size.toFixed(2)} ${unit}`;
+}
+
+function refersToSameFile(input, output) {
+  const inputStat = fs.statSync(input);
+
+  try {
+    const outputStat = fs.statSync(output);
+    if (
+      inputStat.ino !== 0 &&
+      inputStat.dev === outputStat.dev &&
+      inputStat.ino === outputStat.ino
+    ) {
+      return true;
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+
+  return path.relative(input, output) === '';
 }
 
 function runGhostscript(executable, args) {
@@ -164,7 +181,7 @@ async function main() {
     throw new Error('Output file must have a .pdf extension.');
   }
 
-  if (input === output) {
+  if (refersToSameFile(input, output)) {
     throw new Error('Input and output paths must be different.');
   }
 
@@ -202,19 +219,16 @@ async function main() {
           buildArgs(input, candidate, settings[i])
         );
 
-        if (!fs.existsSync(candidate) || fs.statSync(candidate).size === 0) {
+        if (!fs.existsSync(candidate)) {
           continue;
         }
 
         const size = fs.statSync(candidate).size;
+        if (size === 0) continue;
+
         const reduction = ((originalSize - size) / originalSize) * 100;
 
-        candidates.push({
-          path: candidate,
-          size,
-          reduction,
-          settings: settings[i]
-        });
+        candidates.push({ path: candidate, size });
 
         console.log(
           `Pass ${i + 1}: ${formatBytes(size)} ` +
@@ -233,17 +247,10 @@ async function main() {
       throw new Error('Ghostscript could not produce a compressed PDF.');
     }
 
-    // Prefer the largest file that meets the target. If none meets it,
-    // use the smallest candidate and report that the target was missed.
-    const meetingTarget = candidates
-      .filter(candidate => candidate.size <= targetSize)
-      .sort((a, b) => b.size - a.size);
-
-    const selected = meetingTarget.length
-      ? meetingTarget[0]
-      : candidates.reduce((smallest, candidate) =>
-          candidate.size < smallest.size ? candidate : smallest
-        );
+    const selected = candidates.find(candidate => candidate.size <= targetSize) ||
+      candidates.reduce((smallest, candidate) =>
+        candidate.size < smallest.size ? candidate : smallest
+      );
 
     fs.mkdirSync(path.dirname(output), { recursive: true });
 
