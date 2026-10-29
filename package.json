@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "help": "`npm run pdfmerge` - Merge PDF files from pdfmerge/input/ into pdfmerge/output/merged.pdf",
-    "pdfmerge": "node pdfmerge/main.js"
+    "pdfmerge": "node pdf/main.js",
+    "pdfcompress": "node pdf/pdfcompress.js"
   },
   "author": "Biswasindhu Mandal",
   "license": "ISC",
